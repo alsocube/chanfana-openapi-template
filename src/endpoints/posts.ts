@@ -46,7 +46,7 @@ export class PostsEndpoint extends OpenAPIRoute {
 					file_path,
 					updated_at,
 					file_name
-				FROM public.posts
+				FROM public.cms_posts
 			`);
 
 			return rows;

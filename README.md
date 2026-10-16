@@ -56,7 +56,7 @@ A live public deployment of this template is available at [https://openapi-templ
 
 ## Posts endpoint
 
-`GET /posts` reads posts from the `public.posts` PostgreSQL table and returns a JSON array containing `post_id`, `user_id`, `display_name`, `title`, `contents`, `created_at`, `file_path`, `updated_at`, and `file_name`.
+`GET /posts` reads posts from the `public.cms_posts` PostgreSQL table and returns a JSON array containing `post_id`, `user_id`, `display_name`, `title`, `contents`, `created_at`, `file_path`, `updated_at`, and `file_name`.
 
 The Worker uses the `pg` client and connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create a Hyperdrive configuration with the Supabase connection string (use the actual database password; do not commit it), then add the returned ID to `wrangler.jsonc`:
 
