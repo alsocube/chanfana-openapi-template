@@ -18,12 +18,13 @@
 	"dependencies": {
 		"chanfana": "2.8.3",
 		"hono": "4.11.1",
-		"postgres": "3.4.9",
+		"pg": "^8.23.1",
 		"zod": "3.25.67"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.21.3",
 		"@types/node": "24.10.1",
+		"@types/pg": "^8.23.1",
 		"@vitest/runner": "4.1.10",
 		"@vitest/snapshot": "4.1.10",
 		"typescript": "5.9.3",

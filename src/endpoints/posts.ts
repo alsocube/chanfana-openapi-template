@@ -1,7 +1,6 @@
 import { contentJson, OpenAPIRoute } from "chanfana";
-import postgres from "postgres";
 import { z } from "zod";
-import { AppContext } from "../types";
+import type { AppContext } from "../types";
 
 const postSchema = z.object({
 	post_id: z.unknown(),
@@ -14,8 +13,6 @@ const postSchema = z.object({
 	updated_at: z.unknown(),
 	file_name: z.unknown(),
 });
-
-type Post = z.infer<typeof postSchema>;
 
 export class PostsEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -31,10 +28,14 @@ export class PostsEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
-		const sql = postgres(c.env.HYPERDRIVE.connectionString, { max: 1 });
+		const { Client } = await import("pg");
+		const client = new Client({
+			connectionString: c.env.HYPERDRIVE.connectionString,
+		});
 
 		try {
-			const posts = await sql<Post[]>`
+			await client.connect();
+			const { rows } = await client.query(`
 				SELECT
 					post_id,
 					user_id,
@@ -46,11 +47,11 @@ export class PostsEndpoint extends OpenAPIRoute {
 					updated_at,
 					file_name
 				FROM public.posts
-			`;
+			`);
 
-			return posts;
+			return rows;
 		} finally {
-			await sql.end({ timeout: 5 });
+			await client.end();
 		}
 	}
 }

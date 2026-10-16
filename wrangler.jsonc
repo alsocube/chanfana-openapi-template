@@ -7,6 +7,13 @@
 	"observability": {
 		"enabled": true
 	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "5f49b17e773c49deb7f74702546f0111",
+			"localConnectionString": "postgres://postgres:postgres@localhost:5432/postgres"
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "DB",

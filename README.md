@@ -58,7 +58,7 @@ A live public deployment of this template is available at [https://openapi-templ
 
 `GET /posts` reads posts from the `public.posts` PostgreSQL table and returns a JSON array containing `post_id`, `user_id`, `display_name`, `title`, `contents`, `created_at`, `file_path`, `updated_at`, and `file_name`.
 
-The Worker connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create a Hyperdrive configuration with the Supabase connection string (use the actual database password; do not commit it), then add the returned ID to `wrangler.jsonc`:
+The Worker uses the `pg` client and connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create a Hyperdrive configuration with the Supabase connection string (use the actual database password; do not commit it), then add the returned ID to `wrangler.jsonc`:
 
 ```jsonc
 "hyperdrive": [
@@ -69,7 +69,7 @@ The Worker connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create
 ]
 ```
 
-The connection string should use the Supabase pooler host and database shown in your Supabase project settings. Configure the binding for local development as well if you want to call `/posts` with `wrangler dev`.
+The connection string should use the Supabase pooler host and database shown in your Supabase project settings. The checked-in `localConnectionString` is a development default for a local PostgreSQL instance; override it with `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` if your local database uses a different connection string.
 
 ## Testing
 
