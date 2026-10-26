@@ -58,6 +58,16 @@ A live public deployment of this template is available at [https://openapi-templ
 
 `GET /posts` reads posts from the `public.cms_posts` PostgreSQL table and returns a JSON array containing `post_id`, `user_id`, `display_name`, `title`, `contents`, `created_at`, `file_path`, `updated_at`, and `file_name`.
 
+`POST /posts` accepts `multipart/form-data` with required `display_name`, `title`, `contents`, and `file` fields. It stores raster images up to 10 MiB in the `POSTS_BUCKET` R2 bucket, then creates a `public.cms_posts` record with `user_id` set to `1999`; `file_path` contains the R2 object key and `file_name` contains the uploaded filename. The API returns the created post with status `201`.
+
+Create the R2 bucket before deploying:
+
+```bash
+npx wrangler r2 bucket create chanfana-openapi-template-posts
+```
+
+The R2 bucket binding is configured in `wrangler.jsonc` as `POSTS_BUCKET`.
+
 The Worker uses the `pg` client and connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create a Hyperdrive configuration with the Supabase connection string (use the actual database password; do not commit it), then add the returned ID to `wrangler.jsonc`:
 
 ```jsonc

@@ -6,5 +6,6 @@ export type HandleArgs = [AppContext];
 declare global {
 	interface Env {
 		HYPERDRIVE: Hyperdrive;
+		POSTS_BUCKET: R2Bucket;
 	}
 }

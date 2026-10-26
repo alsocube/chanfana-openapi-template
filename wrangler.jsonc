@@ -7,6 +7,12 @@
 	"observability": {
 		"enabled": true
 	},
+	"r2_buckets": [
+		{
+			"binding": "POSTS_BUCKET",
+			"bucket_name": "chanfana-openapi-template-posts"
+		}
+	],
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
