@@ -101,14 +101,14 @@ export class CreatePostEndpoint extends OpenAPIRoute {
 							properties: {
 								display_name: { type: "string" as const },
 								title: { type: "string" as const },
-								contents: { type: "string" as const },
+								contents: { type: "string" as const, nullable: true },
 								file: {
 									type: "string" as const,
 									format: "binary" as const,
 									description: "Image file up to 10 MiB",
 								},
 							},
-							required: ["display_name", "title", "contents", "file"],
+							required: ["display_name", "title", "file"],
 						},
 					},
 				},
@@ -140,18 +140,18 @@ export class CreatePostEndpoint extends OpenAPIRoute {
 
 		if (
 			typeof displayName !== "string" ||
-			!displayName.trim() ||
-			typeof title !== "string" ||
-			!title.trim() ||
-			typeof contents !== "string" ||
-			!contents.trim() ||
+				!displayName.trim() ||
+				typeof title !== "string" ||
+				!title.trim() ||
+				(contents !== null &&
+					(typeof contents !== "string" || !contents.trim())) ||
 			!(uploadedFile instanceof File) ||
 			!uploadedFile.name
 		) {
 			return requestError(
 				c,
 				400,
-				"Required fields are display_name, title, contents, and file",
+				"Required fields are display_name, title, and file; contents may be null",
 			);
 		}
 

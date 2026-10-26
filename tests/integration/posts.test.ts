@@ -15,6 +15,20 @@ describe("post image paths", () => {
 });
 
 describe("POST /posts", () => {
+	it("allows contents to be omitted", async () => {
+		const formData = new FormData();
+		formData.set("display_name", "Test user");
+		formData.set("title", "Test post");
+		formData.set("file", new File(["image"], "image.png", { type: "image/png" }));
+
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "POST",
+			body: formData,
+		});
+
+		expect(response.status).toBe(201);
+	});
+
 	it("requires all post fields and an image", async () => {
 		const formData = new FormData();
 		formData.set("title", "Test post");
