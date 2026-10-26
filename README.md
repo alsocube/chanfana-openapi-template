@@ -63,10 +63,10 @@ A live public deployment of this template is available at [https://openapi-templ
 Create the R2 bucket before deploying:
 
 ```bash
-npx wrangler r2 bucket create chanfana-openapi-template-posts
+npx wrangler r2 bucket create simplycms
 ```
 
-The R2 bucket binding is configured in `wrangler.jsonc` as `POSTS_BUCKET`.
+The R2 bucket binding is configured in `wrangler.jsonc` as `POSTS_BUCKET` and targets the `simplycms` bucket.
 
 The Worker uses the `pg` client and connects to Supabase PostgreSQL through Cloudflare Hyperdrive. Create a Hyperdrive configuration with the Supabase connection string (use the actual database password; do not commit it), then add the returned ID to `wrangler.jsonc`:
 
