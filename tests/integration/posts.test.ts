@@ -1,5 +1,18 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { createPostImagePath } from "../../src/endpoints/posts";
+
+describe("post image paths", () => {
+	it("uses the generated filename in the R2 key and CDN URL", () => {
+		const imagePath = createPostImagePath("original.PNG");
+
+		expect(imagePath.fileName).toMatch(/^[0-9a-f-]+\.png$/);
+		expect(imagePath.objectKey).toBe(`posts/${imagePath.fileName}`);
+		expect(imagePath.filePath).toBe(
+			`https://cdn.simplycms.my.id/${imagePath.objectKey}`,
+		);
+	});
+});
 
 describe("POST /posts", () => {
 	it("requires all post fields and an image", async () => {

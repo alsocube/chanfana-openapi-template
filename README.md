@@ -58,7 +58,7 @@ A live public deployment of this template is available at [https://openapi-templ
 
 `GET /posts` reads posts from the `public.cms_posts` PostgreSQL table and returns a JSON array containing `post_id`, `user_id`, `display_name`, `title`, `contents`, `created_at`, `file_path`, `updated_at`, and `file_name`.
 
-`POST /posts` accepts `multipart/form-data` with required `display_name`, `title`, `contents`, and `file` fields. It stores raster images up to 10 MiB in the `POSTS_BUCKET` R2 bucket, then creates a `public.cms_posts` record with `user_id` set to `1999`; `file_path` contains the R2 object key and `file_name` contains the uploaded filename. The API returns the created post with status `201`.
+`POST /posts` accepts `multipart/form-data` with required `display_name`, `title`, `contents`, and `file` fields. It stores raster images up to 10 MiB in the `POSTS_BUCKET` R2 bucket under `posts/<generated-filename>`, preserving the uploaded file's extension. The `public.cms_posts` record uses the same generated basename for `file_name` and stores the full `https://cdn.simplycms.my.id/posts/<generated-filename>` URL in `file_path`; `user_id` is set to `1999`. The API returns the created post with status `201`.
 
 Create the R2 bucket before deploying:
 

@@ -3,6 +3,20 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const POSTS_CDN_URL = "https://cdn.simplycms.my.id";
+
+export function createPostImagePath(originalFileName: string) {
+	const extension =
+		originalFileName.match(/\.[a-z0-9]{1,10}$/i)?.[0].toLowerCase() ?? "";
+	const fileName = `${crypto.randomUUID()}${extension}`;
+	const objectKey = `posts/${fileName}`;
+
+	return {
+		fileName,
+		objectKey,
+		filePath: `${POSTS_CDN_URL}/${objectKey}`,
+	};
+}
 
 const postSchema = z.object({
 	post_id: z.unknown(),
@@ -152,7 +166,9 @@ export class CreatePostEndpoint extends OpenAPIRoute {
 			return requestError(c, 415, "Only raster image files are supported");
 		}
 
-		const objectKey = `posts/${crypto.randomUUID()}`;
+		const { fileName, objectKey, filePath } = createPostImagePath(
+			uploadedFile.name,
+		);
 		const { Client } = await import("pg");
 		const client = new Client({
 			connectionString: c.env.HYPERDRIVE.connectionString,
@@ -195,8 +211,8 @@ export class CreatePostEndpoint extends OpenAPIRoute {
 					displayName,
 					title,
 					contents,
-					objectKey,
-					uploadedFile.name,
+					filePath,
+					fileName,
 				],
 			);
 
