@@ -1,5 +1,6 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { tasksRouter } from "./endpoints/tasks/router";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import { DummyEndpoint } from "./endpoints/dummyEndpoint";
@@ -7,6 +8,15 @@ import { CreatePostEndpoint, PostsEndpoint } from "./endpoints/posts";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
+
+app.use(
+	"/posts",
+	cors({
+		origin: "https://www.simplycms.my.id",
+		allowMethods: ["GET", "POST"],
+		allowHeaders: ["Content-Type"],
+	}),
+);
 
 app.onError((err, c) => {
 	if (err instanceof ApiException) {

@@ -2,6 +2,8 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { createPostImagePath } from "../../src/endpoints/posts";
 
+const FRONTEND_ORIGIN = "https://www.simplycms.my.id";
+
 describe("post image paths", () => {
 	it("uses the generated filename in the R2 key and CDN URL", () => {
 		const imagePath = createPostImagePath("original.PNG");
@@ -11,6 +13,60 @@ describe("post image paths", () => {
 		expect(imagePath.filePath).toBe(
 			`https://cdn.simplycms.my.id/${imagePath.objectKey}`,
 		);
+	});
+});
+
+describe("CORS for /posts", () => {
+	it("allows the frontend origin on GET and POST responses", async () => {
+		const getResponse = await SELF.fetch("http://local.test/posts", {
+			headers: { Origin: FRONTEND_ORIGIN },
+		});
+		const postResponse = await SELF.fetch("http://local.test/posts", {
+			method: "POST",
+			headers: { Origin: FRONTEND_ORIGIN },
+			body: new FormData(),
+		});
+
+		expect(getResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
+		expect(postResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
+	});
+
+	it("handles POST preflight requests for the frontend origin", async () => {
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "OPTIONS",
+			headers: {
+				Origin: FRONTEND_ORIGIN,
+				"Access-Control-Request-Method": "POST",
+				"Access-Control-Request-Headers": "content-type",
+			},
+		});
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
+		expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
+			"POST",
+		);
+		expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
+			"Content-Type",
+		);
+	});
+
+	it("does not grant CORS access to other origins", async () => {
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "OPTIONS",
+			headers: {
+				Origin: "https://other.example",
+				"Access-Control-Request-Method": "GET",
+			},
+		});
+
+		expect(response.headers.has("Access-Control-Allow-Origin")).toBe(false);
 	});
 });
 
