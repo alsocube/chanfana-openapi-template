@@ -3,11 +3,9 @@ import { z } from "zod";
 import type { AppContext } from "../types";
 
 const loginRequestSchema = z.object({
-	email: z.string().email().optional(),
-	username: z.string().min(1).optional(),
+	email: z.string().email(),
+	username: z.string().min(1),
 	password: z.string().min(1),
-}).refine((value) => value.email || value.username, {
-	message: "email or username is required",
 });
 
 const loginResponseSchema = z.object({
@@ -61,14 +59,12 @@ export class LoginEndpoint extends OpenAPIRoute {
 			return c.json(
 				{
 					success: false,
-					errors: [{ code: 400, message: "email or username and password are required" }],
+					errors: [{ code: 400, message: "email, username, and password are required" }],
 				},
 				400,
 			);
 		}
 
-		const identifier = parsedRequest.data.email ?? parsedRequest.data.username;
-		const identifierColumn = parsedRequest.data.email ? "email" : "username";
 		const { Client } = await import("pg");
 		const client = new Client({
 			connectionString: c.env.HYPERDRIVE.connectionString,
@@ -80,10 +76,14 @@ export class LoginEndpoint extends OpenAPIRoute {
 				`
 					SELECT user_id, username, email, remember_token, access
 					FROM public.cms_users
-					WHERE ${identifierColumn} = $1 AND password = $2
+					WHERE email = $1 AND username = $2 AND password = $3
 					LIMIT 1
 				`,
-				[identifier, parsedRequest.data.password],
+				[
+					parsedRequest.data.email,
+					parsedRequest.data.username,
+					parsedRequest.data.password,
+				],
 			);
 
 			if (!rows[0]) {

@@ -66,7 +66,7 @@ The `/posts` endpoints allow cross-origin browser requests from `https://www.sim
 
 ## Login endpoint
 
-`POST /login` accepts JSON containing `email` or `username` and `password`. It authenticates against `public.cms_users` and returns `user_id`, `username`, `email`, `remember_token`, and `access`.
+`POST /login` accepts JSON containing `email`, `username`, and `password`. It authenticates all three fields against `public.cms_users` and returns `user_id`, `username`, `email`, `remember_token`, and `access`.
 
 Create the R2 bucket before deploying:
 
