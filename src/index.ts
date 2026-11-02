@@ -1,6 +1,5 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import {
 	CreatePostEndpoint,
@@ -8,18 +7,24 @@ import {
 	PostsEndpoint,
 } from "./endpoints/posts";
 import { LoginEndpoint } from "./endpoints/login";
+import { getCorsHeaders } from "./utils/cors";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
 
-app.use(
-	"/posts",
-	cors({
-		origin: "https://www.simplycms.my.id",
-		allowMethods: ["GET", "POST", "DELETE"],
-		allowHeaders: ["Content-Type"],
-	}),
-);
+app.use("*", async (c, next) => {
+	const corsHeaders = getCorsHeaders(c.req.header("Origin") ?? null);
+
+	if (c.req.method === "OPTIONS") {
+		return new Response(null, { status: 204, headers: corsHeaders });
+	}
+
+	await next();
+
+	for (const [key, value] of Object.entries(corsHeaders)) {
+		c.header(key, value);
+	}
+});
 
 app.onError((err, c) => {
 	if (err instanceof ApiException) {

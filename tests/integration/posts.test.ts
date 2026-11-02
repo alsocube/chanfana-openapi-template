@@ -70,6 +70,42 @@ describe("CORS for /posts", () => {
 	});
 });
 
+describe("CORS for all routes", () => {
+	it("handles login preflight requests for the frontend origin", async () => {
+		const response = await SELF.fetch("http://local.test/login", {
+			method: "OPTIONS",
+			headers: {
+				Origin: FRONTEND_ORIGIN,
+				"Access-Control-Request-Method": "POST",
+				"Access-Control-Request-Headers": "content-type",
+			},
+		});
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
+		expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
+			"POST",
+		);
+	});
+
+	it("adds CORS headers to login responses", async () => {
+		const response = await SELF.fetch("http://local.test/login", {
+			method: "POST",
+			headers: {
+				Origin: FRONTEND_ORIGIN,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ email: "missing@example.com", password: "secret" }),
+		});
+
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
+	});
+});
+
 describe("POST /posts", () => {
 	it("allows contents to be omitted", async () => {
 		const formData = new FormData();

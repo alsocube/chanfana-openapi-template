@@ -62,7 +62,7 @@ A live public deployment of this template is available at [https://openapi-templ
 
 `DELETE /posts` accepts a JSON body containing a positive integer `post_id`, removes the post and its image, and returns `204` when successful.
 
-The `/posts` endpoints allow cross-origin browser requests from `https://www.simplycms.my.id` for `GET`, `POST`, and `DELETE` requests. Other origins are not allowed.
+All API routes allow cross-origin browser requests from `https://www.simplycms.my.id` for `GET`, `POST`, and `DELETE` requests. `OPTIONS` preflight requests return `204` with the CORS headers. Other origins are not allowed.
 
 ## Login endpoint
 
