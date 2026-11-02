@@ -18,6 +18,91 @@ export function createPostImagePath(originalFileName: string) {
 	};
 }
 
+export class DeletePostEndpoint extends OpenAPIRoute {
+	public schema = {
+		tags: ["Posts"],
+		summary: "Delete a post",
+		operationId: "delete-post",
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							post_id: z.number().int().positive(),
+						}),
+					},
+				},
+			},
+		},
+		responses: {
+			"204": { description: "Post deleted" },
+			"400": { description: "Missing or invalid post_id" },
+			"404": { description: "Post not found" },
+		},
+	};
+
+	public async handle(c: AppContext) {
+		let body: { post_id?: unknown };
+		try {
+			body = await c.req.json<{ post_id?: unknown }>();
+		} catch {
+			return requestError(c, 400, "Expected a JSON body with a positive post_id");
+		}
+
+		const postId = z.number().int().positive().safeParse(body.post_id);
+		if (!postId.success) {
+			return requestError(c, 400, "post_id must be a positive integer");
+		}
+
+		const { Client } = await import("pg");
+		const client = new Client({
+			connectionString: c.env.HYPERDRIVE.connectionString,
+		});
+
+		try {
+			await client.connect();
+			await client.query("BEGIN");
+			const { rows } = await client.query(
+				"SELECT file_name FROM public.cms_posts WHERE post_id = $1 FOR UPDATE",
+				[postId.data],
+			);
+
+			if (!rows[0]) {
+				await client.query("ROLLBACK");
+				return c.json(
+					{
+						success: false,
+						errors: [{ code: 404, message: "Post not found" }],
+					},
+					404,
+				);
+			}
+
+			const fileName = rows[0].file_name;
+			if (typeof fileName === "string" && fileName) {
+				await c.env.POSTS_BUCKET.delete(`posts/${fileName}`);
+			}
+			await client.query("DELETE FROM public.cms_posts WHERE post_id = $1", [
+				postId.data,
+			]);
+			await client.query("COMMIT");
+			return new Response(null, { status: 204 });
+		} catch (error) {
+			try {
+				await client.query("ROLLBACK");
+			} catch (rollbackError) {
+				throw new AggregateError(
+					[error, rollbackError],
+					"Post deletion failed and the transaction could not be rolled back",
+				);
+			}
+			throw error;
+		} finally {
+			await client.end();
+		}
+	}
+}
+
 const postSchema = z.object({
 	post_id: z.unknown(),
 	user_id: z.unknown(),

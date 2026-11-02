@@ -1,10 +1,13 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { tasksRouter } from "./endpoints/tasks/router";
 import { ContentfulStatusCode } from "hono/utils/http-status";
-import { DummyEndpoint } from "./endpoints/dummyEndpoint";
-import { CreatePostEndpoint, PostsEndpoint } from "./endpoints/posts";
+import {
+	CreatePostEndpoint,
+	DeletePostEndpoint,
+	PostsEndpoint,
+} from "./endpoints/posts";
+import { LoginEndpoint } from "./endpoints/login";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -13,7 +16,7 @@ app.use(
 	"/posts",
 	cors({
 		origin: "https://www.simplycms.my.id",
-		allowMethods: ["GET", "POST"],
+		allowMethods: ["GET", "POST", "DELETE"],
 		allowHeaders: ["Content-Type"],
 	}),
 );
@@ -51,13 +54,11 @@ const openapi = fromHono(app, {
 	},
 });
 
-// Register Tasks Sub router
-openapi.route("/tasks", tasksRouter);
-
 // Register other endpoints
-openapi.post("/dummy/:slug", DummyEndpoint);
+openapi.post("/login", LoginEndpoint);
 openapi.get("/posts", PostsEndpoint);
 openapi.post("/posts", CreatePostEndpoint);
+openapi.delete("/posts", DeletePostEndpoint);
 
 // Export the Hono app
 export default app;
