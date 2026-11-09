@@ -18,6 +18,9 @@ export default defineConfig({
 				compatibilityFlags: ["experimental", "nodejs_compat"],
 				bindings: {
 					MIGRATIONS: migrations,
+					R2_ACCOUNT_ID: "test-account",
+					R2_API_TOKEN: "test-token",
+					R2_BUCKET_NAME: "test-bucket",
 				},
 			},
 		}),

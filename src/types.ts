@@ -7,5 +7,8 @@ declare global {
 	interface Env {
 		HYPERDRIVE: Hyperdrive;
 		POSTS_BUCKET: R2Bucket;
+		R2_ACCOUNT_ID: string;
+		R2_API_TOKEN: string;
+		R2_BUCKET_NAME: string;
 	}
 }

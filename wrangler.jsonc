@@ -10,6 +10,10 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"R2_ACCOUNT_ID": "0d8499ecd9b722978540982397cbfedd",
+		"R2_BUCKET_NAME": "simplycms"
+	},
 	"r2_buckets": [
 		{
 			"binding": "POSTS_BUCKET",
