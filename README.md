@@ -64,19 +64,20 @@ A live public deployment of this template is available at [https://openapi-templ
 
 ## R2 metrics endpoint
 
-`GET /r2/metrics` retrieves the configured bucket's usage metrics from Cloudflare's R2 API. The response includes the Cloudflare API response, including fields such as object count and storage sizes. This endpoint is not authenticated by the Worker; protect it at the deployment or network layer if its metrics are sensitive.
+`GET /r2/metrics` lists the configured bucket through the R2 S3-compatible API and returns calculated object count and total payload size. This endpoint is not authenticated by the Worker; protect it at the deployment or network layer if its metrics are sensitive.
 
-Configure the account and bucket in `wrangler.jsonc`, then add the API token as a Worker secret:
+Configure the account and bucket in `wrangler.jsonc`, then provide the S3 secret access key as a Worker secret:
 
 ```bash
-npx wrangler secret put R2_API_TOKEN
+npx wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
 The endpoint uses the following Worker bindings:
 
 - `R2_ACCOUNT_ID`: Cloudflare account ID.
 - `R2_BUCKET_NAME`: R2 bucket name.
-- `R2_API_TOKEN`: API token with permission to read R2 bucket usage.
+- `R2_ACCESS_KEY_ID`: R2 S3 access key ID.
+- `R2_SECRET_ACCESS_KEY`: R2 S3 secret access key.
 
 All API routes allow cross-origin browser requests from `https://www.simplycms.my.id` for `GET`, `POST`, and `DELETE` requests. `OPTIONS` preflight requests return `204` with the CORS headers. Other origins are not allowed.
 

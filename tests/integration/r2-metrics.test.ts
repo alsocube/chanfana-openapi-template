@@ -6,50 +6,50 @@ describe("GET /r2/metrics", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("returns the Cloudflare R2 usage response", async () => {
-		const upstreamResponse = {
-			success: true,
-			result: { objectCount: 3, payloadSize: 1024 },
-			errors: [],
-			messages: [],
-		};
+	it("lists the configured R2 bucket and calculates its metrics", async () => {
 		const fetchMock = vi
 			.spyOn(globalThis, "fetch")
-			.mockImplementation(() =>
-				Promise.resolve(
-					new Response(JSON.stringify(upstreamResponse), {
-						status: 200,
-						headers: { "Content-Type": "application/json" },
-					}),
-				),
-			);
+			.mockImplementation((input) => {
+				const url = new URL(input.toString());
+				expect(url.origin).toBe(
+					"https://test-account.r2.cloudflarestorage.com",
+				);
+				expect(url.pathname).toBe("/test-bucket");
+				expect(url.searchParams.get("list-type")).toBe("2");
+				return Promise.resolve(
+					new Response(
+						`<?xml version="1.0" encoding="UTF-8"?>
+						<ListBucketResult>
+							<IsTruncated>false</IsTruncated>
+							<Contents><Key>one.txt</Key><Size>1024</Size></Contents>
+							<Contents><Key>two.txt</Key><Size>2048</Size></Contents>
+						</ListBucketResult>`,
+						{ status: 200, headers: { "Content-Type": "application/xml" } },
+					),
+				);
+			});
 
 		const response = await SELF.fetch("http://local.test/r2/metrics");
 
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual(upstreamResponse);
-		expect(fetchMock).toHaveBeenCalledWith(
-			"https://api.cloudflare.com/client/v4/accounts/test-account/r2/buckets/test-bucket/usage",
-			{
-				headers: {
-					Authorization: "Bearer test-token",
-					Accept: "application/json",
-				},
-			},
+		expect(await response.json()).toEqual({
+			success: true,
+			result: { objectCount: 2, payloadSize: 3072 },
+			errors: [],
+			messages: [],
+		});
+		expect(fetchMock).toHaveBeenCalledOnce();
+		const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+		expect(headers["x-amz-content-sha256"]).toMatch(/^[a-f0-9]{64}$/);
+		expect(headers["x-amz-date"]).toMatch(/^\d{8}T\d{6}Z$/);
+		expect(headers.Authorization).toMatch(
+			/^AWS4-HMAC-SHA256 Credential=test-access-key\/\d{8}\/auto\/s3\/aws4_request,/,
 		);
 	});
 
-	it("returns a gateway error when Cloudflare rejects the request", async () => {
+	it("returns a gateway error when R2 rejects the request", async () => {
 		vi.spyOn(globalThis, "fetch").mockImplementation(() =>
-			Promise.resolve(
-				new Response(
-					JSON.stringify({
-						success: false,
-						errors: [{ code: 10000, message: "Authentication error" }],
-					}),
-					{ status: 403 },
-				),
-			),
+			Promise.resolve(new Response("AccessDenied", { status: 403 })),
 		);
 
 		const response = await SELF.fetch("http://local.test/r2/metrics");
@@ -58,7 +58,7 @@ describe("GET /r2/metrics", () => {
 		expect(response.status).toBe(502);
 		expect(body.success).toBe(false);
 		expect(body.errors).toEqual([
-			{ code: 502, message: "The R2 metrics API returned an error" },
+			{ code: 502, message: "Unable to retrieve R2 bucket metrics" },
 		]);
 	});
 });
