@@ -81,6 +81,23 @@ The endpoint uses the following Worker bindings:
 
 All API routes allow cross-origin browser requests from `https://www.simplycms.my.id` for `GET`, `POST`, and `DELETE` requests. `OPTIONS` preflight requests return `204` with the CORS headers. Other origins are not allowed.
 
+## Workers Observability endpoint
+
+`POST /observability/query` forwards a telemetry query to the Cloudflare Workers
+Observability API and returns the query result. The request body is the JSON
+payload documented by Cloudflare's [Workers Observability query API](https://developers.cloudflare.com/api/resources/workers/subresources/observability/subresources/telemetry/methods/query/).
+
+Configure these Worker bindings before deploying:
+
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account ID.
+- `CLOUDFLARE_API_TOKEN`: API token with the `Workers Observability Write` permission.
+
+Store the API token as a secret rather than committing it to `wrangler.jsonc`:
+
+```bash
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+```
+
 ## Login endpoint
 
 `POST /login` accepts JSON containing either `email` or `username`, plus `password`. It authenticates the supplied identifier against `public.cms_users` and returns `user_id`, `username`, `email`, `remember_token`, and `access`.

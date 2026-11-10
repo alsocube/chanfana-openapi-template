@@ -8,6 +8,7 @@ import {
 } from "./endpoints/posts";
 import { LoginEndpoint } from "./endpoints/login";
 import { R2MetricsEndpoint } from "./endpoints/r2-metrics";
+import { ObservabilityQueryEndpoint } from "./endpoints/observability";
 import { getCorsHeaders } from "./utils/cors";
 
 // Start a Hono app
@@ -66,6 +67,7 @@ openapi.get("/posts", PostsEndpoint);
 openapi.post("/posts", CreatePostEndpoint);
 openapi.delete("/posts", DeletePostEndpoint);
 openapi.get("/r2/metrics", R2MetricsEndpoint);
+openapi.post("/observability/query", ObservabilityQueryEndpoint);
 
 // Export the Hono app
 export default app;

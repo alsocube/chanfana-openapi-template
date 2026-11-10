@@ -34,7 +34,28 @@ describe("GET /r2/metrics", () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({
 			success: true,
-			result: { objectCount: 2, payloadSize: 3072 },
+			result: {
+				objectCount: 2,
+				payloadSize: 3072,
+				averageObjectSize: 1536,
+				largestObject: { key: "two.txt", size: 2048 },
+				newestObject: null,
+				oldestObject: null,
+				zeroByteObjectCount: 0,
+				sizeByExtension: { ".txt": 3072 },
+				countByExtension: { ".txt": 2 },
+				sizeByPrefix: { "(root)": 3072 },
+				topLargestObjects: [
+					{ key: "two.txt", size: 2048 },
+					{ key: "one.txt", size: 1024 },
+				],
+				ageDistribution: {
+					lessThanOneDay: 0,
+					oneToThirtyDays: 0,
+					thirtyToThreeSixtyFiveDays: 0,
+					overThreeSixtyFiveDays: 0,
+				},
+			},
 			errors: [],
 			messages: [],
 		});

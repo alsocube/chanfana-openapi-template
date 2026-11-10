@@ -7,6 +7,27 @@ const metricsSchema = z.object({
 	result: z.object({
 		objectCount: z.number(),
 		payloadSize: z.number(),
+		averageObjectSize: z.number(),
+		largestObject: z
+			.object({ key: z.string(), size: z.number() })
+			.nullable(),
+		newestObject: z
+			.object({ key: z.string(), size: z.number(), lastModified: z.string() })
+			.nullable(),
+		oldestObject: z
+			.object({ key: z.string(), size: z.number(), lastModified: z.string() })
+			.nullable(),
+		zeroByteObjectCount: z.number(),
+		sizeByExtension: z.record(z.number()),
+		countByExtension: z.record(z.number()),
+		sizeByPrefix: z.record(z.number()),
+		topLargestObjects: z.array(z.object({ key: z.string(), size: z.number() })),
+		ageDistribution: z.object({
+			lessThanOneDay: z.number(),
+			oneToThirtyDays: z.number(),
+			thirtyToThreeSixtyFiveDays: z.number(),
+			overThreeSixtyFiveDays: z.number(),
+		}),
 	}),
 	errors: z.array(z.unknown()).optional(),
 	messages: z.array(z.unknown()).optional(),
@@ -88,13 +109,71 @@ async function createAuthorization(
 	};
 }
 
+type ListedObject = {
+	key: string;
+	size: number;
+	lastModified?: string;
+};
+
+function decodeXml(value: string) {
+	return value
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'");
+}
+
 function parsePage(xml: string) {
-	const sizes = [...xml.matchAll(/<Contents>[\s\S]*?<Size>(\d+)<\/Size>[\s\S]*?<\/Contents>/g)].map(
-		(match) => Number(match[1]),
-	);
+	const objects: ListedObject[] = [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)]
+		.map((match) => {
+			const contents = match[1];
+			const key = contents.match(/<Key>([\s\S]*?)<\/Key>/)?.[1];
+			const size = contents.match(/<Size>(\d+)<\/Size>/)?.[1];
+			const lastModified = contents.match(
+				/<LastModified>([\s\S]*?)<\/LastModified>/,
+			)?.[1];
+			if (key === undefined || size === undefined) {
+				return undefined;
+			}
+			const object: ListedObject = {
+				key: decodeXml(key),
+				size: Number(size),
+			};
+			if (lastModified) object.lastModified = decodeXml(lastModified);
+			return object;
+		})
+		.filter((object): object is ListedObject => object !== undefined);
 	const isTruncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
 	const nextToken = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
-	return { objectCount: sizes.length, payloadSize: sizes.reduce((sum, size) => sum + size, 0), isTruncated, nextToken };
+	return { objects, isTruncated, nextToken };
+}
+
+function extensionFor(key: string) {
+	const fileName = key.slice(key.lastIndexOf("/") + 1);
+	const extension = fileName.includes(".")
+		? fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase()
+		: "";
+	return extension ? `.${extension}` : "(none)";
+}
+
+function prefixFor(key: string) {
+	const separator = key.indexOf("/");
+	return separator === -1 ? "(root)" : key.slice(0, separator);
+}
+
+function ageBucket(lastModified: string | undefined, now: number) {
+	if (!lastModified) {
+		return undefined;
+	}
+	const ageInDays = (now - Date.parse(lastModified)) / 86_400_000;
+	if (!Number.isFinite(ageInDays) || ageInDays < 0) {
+		return undefined;
+	}
+	if (ageInDays < 1) return "lessThanOneDay";
+	if (ageInDays < 30) return "oneToThirtyDays";
+	if (ageInDays < 365) return "thirtyToThreeSixtyFiveDays";
+	return "overThreeSixtyFiveDays";
 }
 
 export class R2MetricsEndpoint extends OpenAPIRoute {
@@ -135,8 +214,7 @@ export class R2MetricsEndpoint extends OpenAPIRoute {
 			);
 		}
 
-		let objectCount = 0;
-		let payloadSize = 0;
+		const objects: ListedObject[] = [];
 		let continuationToken: string | undefined;
 
 		try {
@@ -160,8 +238,7 @@ export class R2MetricsEndpoint extends OpenAPIRoute {
 					throw new Error(`S3 request failed with status ${response.status}`);
 				}
 				const page = parsePage(await response.text());
-				objectCount += page.objectCount;
-				payloadSize += page.payloadSize;
+				objects.push(...page.objects);
 				continuationToken = page.isTruncated ? page.nextToken : undefined;
 				if (page.isTruncated && !continuationToken) {
 					throw new Error("S3 response was truncated without a continuation token");
@@ -178,10 +255,81 @@ export class R2MetricsEndpoint extends OpenAPIRoute {
 			);
 		}
 
+		const now = Date.now();
+		const sizeByExtension: Record<string, number> = {};
+		const countByExtension: Record<string, number> = {};
+		const sizeByPrefix: Record<string, number> = {};
+		const ageDistribution = {
+			lessThanOneDay: 0,
+			oneToThirtyDays: 0,
+			thirtyToThreeSixtyFiveDays: 0,
+			overThreeSixtyFiveDays: 0,
+		};
+		let zeroByteObjectCount = 0;
+		let newestObject: ListedObject | undefined;
+		let oldestObject: ListedObject | undefined;
+
+		for (const object of objects) {
+			const extension = extensionFor(object.key);
+			sizeByExtension[extension] = (sizeByExtension[extension] ?? 0) + object.size;
+			countByExtension[extension] = (countByExtension[extension] ?? 0) + 1;
+			const prefix = prefixFor(object.key);
+			sizeByPrefix[prefix] = (sizeByPrefix[prefix] ?? 0) + object.size;
+			if (object.size === 0) zeroByteObjectCount++;
+
+			const bucket = ageBucket(object.lastModified, now);
+			if (bucket) ageDistribution[bucket]++;
+			if (object.lastModified) {
+				if (
+					!newestObject ||
+					Date.parse(object.lastModified) > Date.parse(newestObject.lastModified!)
+				) {
+					newestObject = object;
+				}
+				if (
+					!oldestObject ||
+					Date.parse(object.lastModified) < Date.parse(oldestObject.lastModified!)
+				) {
+					oldestObject = object;
+				}
+			}
+		}
+
+		const payloadSize = objects.reduce((sum, object) => sum + object.size, 0);
+		const largestObjects = [...objects]
+			.sort((left, right) => right.size - left.size)
+			.slice(0, 10)
+			.map(({ key, size }) => ({ key, size }));
+
 		return c.json(
 			{
 				success: true,
-				result: { objectCount, payloadSize },
+				result: {
+					objectCount: objects.length,
+					payloadSize,
+					averageObjectSize: objects.length ? payloadSize / objects.length : 0,
+					largestObject: largestObjects[0] ?? null,
+					newestObject: newestObject
+						? {
+								key: newestObject.key,
+								size: newestObject.size,
+								lastModified: newestObject.lastModified!,
+							}
+						: null,
+					oldestObject: oldestObject
+						? {
+								key: oldestObject.key,
+								size: oldestObject.size,
+								lastModified: oldestObject.lastModified!,
+							}
+						: null,
+					zeroByteObjectCount,
+					sizeByExtension,
+					countByExtension,
+					sizeByPrefix,
+					topLargestObjects: largestObjects,
+					ageDistribution,
+				},
 				errors: [],
 				messages: [],
 			},
