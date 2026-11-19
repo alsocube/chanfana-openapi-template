@@ -5,6 +5,7 @@ import {
 	CreatePostEndpoint,
 	DeletePostEndpoint,
 	PostsEndpoint,
+	UpdatePostEndpoint,
 } from "./endpoints/posts";
 import { LoginEndpoint } from "./endpoints/login";
 import { R2MetricsEndpoint } from "./endpoints/r2-metrics";
@@ -65,6 +66,7 @@ const openapi = fromHono(app, {
 openapi.post("/login", LoginEndpoint);
 openapi.get("/posts", PostsEndpoint);
 openapi.post("/posts", CreatePostEndpoint);
+openapi.put("/posts", UpdatePostEndpoint);
 openapi.delete("/posts", DeletePostEndpoint);
 openapi.get("/r2/metrics", R2MetricsEndpoint);
 openapi.post("/observability/query", ObservabilityQueryEndpoint);

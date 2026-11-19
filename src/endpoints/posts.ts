@@ -171,6 +171,270 @@ export class PostsEndpoint extends OpenAPIRoute {
 	}
 }
 
+export class UpdatePostEndpoint extends OpenAPIRoute {
+	public schema = {
+		tags: ["Posts"],
+		summary: "Update a post",
+		operationId: "update-post",
+		request: {
+			body: {
+				description: "Post fields and an optional replacement image",
+				content: {
+					"multipart/form-data": {
+						schema: {
+							type: "object" as const,
+							properties: {
+								post_id: { type: "string" as const },
+								display_name: { type: "string" as const },
+								title: { type: "string" as const },
+								contents: { type: "string" as const, nullable: true },
+								file: {
+									type: "string" as const,
+									format: "binary" as const,
+									description: "Replacement raster image up to 10 MiB",
+								},
+							},
+							required: ["post_id"],
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			"200": {
+				description: "Post updated",
+				...contentJson(postSchema),
+			},
+			"400": { description: "Missing or invalid multipart fields" },
+			"404": { description: "Post not found" },
+			"413": { description: "Image exceeds the 10 MiB size limit" },
+			"415": { description: "Uploaded file is not a supported image" },
+		},
+	};
+
+	public async handle(c: AppContext) {
+		let formData: FormData;
+		try {
+			formData = await c.req.formData();
+		} catch {
+			return requestError(c, 400, "Expected multipart form data");
+		}
+
+		const postIdValue = formData.get("post_id");
+		const displayNameValue = formData.get("display_name");
+		const titleValue = formData.get("title");
+		const contentsValue = formData.get("contents");
+		const uploadedFile = formData.get("file");
+
+		const postId = z.coerce
+			.number()
+			.int()
+			.positive()
+			.safeParse(postIdValue);
+		if (!postId.success) {
+			return requestError(c, 400, "post_id must be a positive integer");
+		}
+
+		const displayName =
+			displayNameValue === null ? undefined : displayNameValue;
+		const title = titleValue === null ? undefined : titleValue;
+		const contents =
+			contentsValue === null ? undefined : contentsValue;
+
+		if (
+			(displayName !== undefined &&
+				(typeof displayName !== "string" || !displayName.trim())) ||
+			(title !== undefined &&
+				(typeof title !== "string" || !title.trim())) ||
+			(contents !== undefined && typeof contents !== "string")
+		) {
+			return requestError(
+				c,
+				400,
+				"display_name, title, and contents must be strings when provided",
+			);
+		}
+		if (
+			displayName !== undefined &&
+			typeof displayName === "string" &&
+			!displayName.trim()
+		) {
+			return requestError(c, 400, "display_name must not be empty");
+		}
+		if (
+			title !== undefined &&
+			typeof title === "string" &&
+			!title.trim()
+		) {
+			return requestError(c, 400, "title must not be empty");
+		}
+
+		if (
+			displayName === undefined &&
+			title === undefined &&
+			contents === undefined &&
+			!(uploadedFile instanceof File)
+		) {
+			return requestError(c, 400, "Provide at least one field or image to update");
+		}
+
+		let replacement:
+			| { fileName: string; objectKey: string; filePath: string; file: File }
+			| undefined;
+		if (uploadedFile !== null) {
+			if (!(uploadedFile instanceof File) || !uploadedFile.name) {
+				return requestError(c, 400, "Uploaded file must be a valid image");
+			}
+			if (uploadedFile.size === 0) {
+				return requestError(c, 400, "Uploaded image must not be empty");
+			}
+			if (uploadedFile.size > MAX_FILE_SIZE) {
+				return requestError(c, 413, "Image must be 10 MiB or smaller");
+			}
+			const contentType = uploadedFile.type.toLowerCase();
+			if (!contentType.startsWith("image/") || contentType === "image/svg+xml") {
+				return requestError(c, 415, "Only raster image files are supported");
+			}
+			replacement = {
+				...createPostImagePath(uploadedFile.name),
+				file: uploadedFile,
+			};
+		}
+
+		const { Client } = await import("pg");
+		const client = new Client({
+			connectionString: c.env.HYPERDRIVE.connectionString,
+		});
+		let replacementUploaded = false;
+		let committed = false;
+
+		try {
+			await client.connect();
+			await client.query("BEGIN");
+			const { rows: existingRows } = await client.query(
+				`
+					SELECT
+						post_id,
+						user_id,
+						display_name,
+						title,
+						contents,
+						created_at,
+						file_path,
+						updated_at,
+						file_name
+					FROM public.cms_posts
+					WHERE post_id = $1
+					FOR UPDATE
+				`,
+				[postId.data],
+			);
+
+			if (!existingRows[0]) {
+				await client.query("ROLLBACK");
+				return c.json(
+					{
+						success: false,
+						errors: [{ code: 404, message: "Post not found" }],
+					},
+					404,
+				);
+			}
+
+			if (replacement) {
+				await c.env.POSTS_BUCKET.put(
+					replacement.objectKey,
+					replacement.file.stream(),
+					{ httpMetadata: { contentType: replacement.file.type.toLowerCase() } },
+				);
+				replacementUploaded = true;
+			}
+
+			const { rows } = await client.query(
+				`
+					UPDATE public.cms_posts
+					SET
+						display_name = COALESCE($2, display_name),
+						title = COALESCE($3, title),
+						contents = CASE WHEN $7 THEN NULLIF($4, '') ELSE contents END,
+						file_path = COALESCE($5, file_path),
+						file_name = COALESCE($6, file_name),
+						updated_at = NOW()
+					WHERE post_id = $1
+					RETURNING
+						post_id,
+						user_id,
+						display_name,
+						title,
+						contents,
+						created_at,
+						file_path,
+						updated_at,
+						file_name
+				`,
+				[
+					postId.data,
+					displayName,
+					title,
+					contents,
+					replacement?.filePath,
+					replacement?.fileName,
+					contents !== undefined,
+				],
+			);
+
+			if (!rows[0]) {
+				throw new Error("Post update did not return an updated record");
+			}
+
+			await client.query("COMMIT");
+			committed = true;
+
+			if (
+				replacement &&
+				typeof existingRows[0].file_name === "string" &&
+				existingRows[0].file_name &&
+				existingRows[0].file_name !== replacement.fileName
+			) {
+				try {
+					await c.env.POSTS_BUCKET.delete(`posts/${existingRows[0].file_name}`);
+				} catch (cleanupError) {
+					console.warn(
+						"Post updated but the previous image could not be removed",
+						cleanupError,
+					);
+				}
+			}
+
+			return c.json(rows[0], 200);
+		} catch (error) {
+			if (!committed) {
+				try {
+					await client.query("ROLLBACK");
+				} catch (rollbackError) {
+					throw new AggregateError(
+						[error, rollbackError],
+						"Post update failed and the transaction could not be rolled back",
+					);
+				}
+			}
+			if (replacementUploaded && replacement) {
+				try {
+					await c.env.POSTS_BUCKET.delete(replacement.objectKey);
+				} catch (cleanupError) {
+					throw new AggregateError(
+						[error, cleanupError],
+						"Post update failed and the uploaded image could not be removed",
+					);
+				}
+			}
+			throw error;
+		} finally {
+			await client.end();
+		}
+	}
+}
+
 export class CreatePostEndpoint extends OpenAPIRoute {
 	public schema = {
 		tags: ["Posts"],

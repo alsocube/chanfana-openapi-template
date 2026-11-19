@@ -60,6 +60,8 @@ A live public deployment of this template is available at [https://openapi-templ
 
 `POST /posts` accepts `multipart/form-data` with required `display_name`, `title`, `contents`, and `file` fields. It stores raster images up to 10 MiB in the `POSTS_BUCKET` R2 bucket under `posts/<generated-filename>`, preserving the uploaded file's extension. The `public.cms_posts` record uses the same generated basename for `file_name` and stores the full `https://cdn.simplycms.my.id/posts/<generated-filename>` URL in `file_path`; `user_id` is set to `1999`. The API returns the created post with status `201`.
 
+`PUT /posts` accepts `multipart/form-data` with a positive integer `post_id` and optional `display_name`, `title`, `contents`, and `file` fields. Omitted text fields and the existing image are preserved. A replacement raster image up to 10 MiB is stored in R2 and replaces the post's existing `file_name` and `file_path`. The API returns the updated post with status `200`.
+
 `DELETE /posts` accepts a JSON body containing a positive integer `post_id`, removes the post and its image, and returns `204` when successful.
 
 ## R2 metrics endpoint

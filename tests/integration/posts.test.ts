@@ -26,6 +26,11 @@ describe("CORS for /posts", () => {
 			headers: { Origin: FRONTEND_ORIGIN },
 			body: new FormData(),
 		});
+		const putResponse = await SELF.fetch("http://local.test/posts", {
+			method: "PUT",
+			headers: { Origin: FRONTEND_ORIGIN },
+			body: new FormData(),
+		});
 
 		expect(getResponse.headers.get("Access-Control-Allow-Origin")).toBe(
 			FRONTEND_ORIGIN,
@@ -33,14 +38,17 @@ describe("CORS for /posts", () => {
 		expect(postResponse.headers.get("Access-Control-Allow-Origin")).toBe(
 			FRONTEND_ORIGIN,
 		);
+		expect(putResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+			FRONTEND_ORIGIN,
+		);
 	});
 
-	it("handles POST preflight requests for the frontend origin", async () => {
+	it("handles POST and PUT preflight requests for the frontend origin", async () => {
 		const response = await SELF.fetch("http://local.test/posts", {
 			method: "OPTIONS",
 			headers: {
 				Origin: FRONTEND_ORIGIN,
-				"Access-Control-Request-Method": "POST",
+				"Access-Control-Request-Method": "PUT",
 				"Access-Control-Request-Headers": "content-type",
 			},
 		});
@@ -50,7 +58,7 @@ describe("CORS for /posts", () => {
 			FRONTEND_ORIGIN,
 		);
 		expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
-			"POST",
+			"PUT",
 		);
 		expect(response.headers.get("Access-Control-Allow-Headers")).toContain(
 			"Content-Type",
@@ -165,6 +173,67 @@ describe("POST /posts", () => {
 
 		const response = await SELF.fetch("http://local.test/posts", {
 			method: "POST",
+			body: formData,
+		});
+
+		expect(response.status).toBe(413);
+	});
+});
+
+describe("PUT /posts", () => {
+	it("requires a positive post_id", async () => {
+		const formData = new FormData();
+		formData.set("post_id", "0");
+		formData.set("title", "Updated post");
+
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "PUT",
+			body: formData,
+		});
+		const body = await response.json<{ success: boolean; errors: unknown[] }>();
+
+		expect(response.status).toBe(400);
+		expect(body.success).toBe(false);
+		expect(body.errors).toHaveLength(1);
+	});
+
+	it("requires at least one field or image to update", async () => {
+		const formData = new FormData();
+		formData.set("post_id", "1");
+
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "PUT",
+			body: formData,
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it("rejects non-image replacement files", async () => {
+		const formData = new FormData();
+		formData.set("post_id", "1");
+		formData.set("file", new File(["text"], "notes.txt", { type: "text/plain" }));
+
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "PUT",
+			body: formData,
+		});
+
+		expect(response.status).toBe(415);
+	});
+
+	it("rejects replacement images larger than 10 MiB", async () => {
+		const formData = new FormData();
+		formData.set("post_id", "1");
+		formData.set(
+			"file",
+			new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.png", {
+				type: "image/png",
+			}),
+		);
+
+		const response = await SELF.fetch("http://local.test/posts", {
+			method: "PUT",
 			body: formData,
 		});
 
