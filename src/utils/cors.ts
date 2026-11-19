@@ -2,7 +2,7 @@ const ALLOWED_ORIGIN = "https://www.simplycms.my.id";
 
 const CORS_HEADERS = {
 	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-	"Access-Control-Allow-Headers": "Content-Type",
+	"Access-Control-Allow-Headers": "Accept, Authorization, Content-Type",
 };
 
 export function getCorsHeaders(origin: string | null): Record<string, string> {
