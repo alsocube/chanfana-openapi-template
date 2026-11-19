@@ -18,10 +18,6 @@ export default defineConfig({
 				compatibilityFlags: ["experimental", "nodejs_compat"],
 				bindings: {
 					MIGRATIONS: migrations,
-					R2_ACCOUNT_ID: "test-account",
-					R2_ACCESS_KEY_ID: "test-access-key",
-					R2_SECRET_ACCESS_KEY: "test-secret-key",
-					R2_BUCKET_NAME: "test-bucket",
 					CLOUDFLARE_ACCOUNT_ID: "test-account-id",
 					CLOUDFLARE_API_TOKEN: "test-api-token",
 				},

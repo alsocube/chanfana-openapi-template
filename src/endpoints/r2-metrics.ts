@@ -33,121 +33,11 @@ const metricsSchema = z.object({
 	messages: z.array(z.unknown()).optional(),
 });
 
-const encoder = new TextEncoder();
-
-async function hmac(key: ArrayBuffer | Uint8Array, value: string) {
-	const cryptoKey = await crypto.subtle.importKey(
-		"raw",
-		key,
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	);
-	return crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(value));
-}
-
-function toHex(value: ArrayBuffer) {
-	return [...new Uint8Array(value)]
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
-}
-
-async function sha256(value: string) {
-	return toHex(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
-}
-
-async function createAuthorization(
-	url: URL,
-	accessKeyId: string,
-	secretAccessKey: string,
-	date: Date,
-) {
-	const amzDate = date.toISOString().replace(/[-:]|\.\d{3}/g, "");
-	const dateStamp = amzDate.slice(0, 8);
-	const region = "auto";
-	const service = "s3";
-	const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-	const payloadHash = await sha256("");
-	const canonicalQueryString = [...url.searchParams.entries()]
-		.sort(([left], [right]) => left.localeCompare(right))
-		.map(
-			([key, value]) =>
-				`${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-		)
-		.join("&");
-	const canonicalHeaders =
-		`host:${url.host}\n` +
-		`x-amz-content-sha256:${payloadHash}\n` +
-		`x-amz-date:${amzDate}\n`;
-	const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-	const canonicalRequest = [
-		"GET",
-		url.pathname,
-		canonicalQueryString,
-		canonicalHeaders,
-		signedHeaders,
-		payloadHash,
-	].join("\n");
-	const stringToSign = [
-		"AWS4-HMAC-SHA256",
-		amzDate,
-		credentialScope,
-		await sha256(canonicalRequest),
-	].join("\n");
-	const dateKey = await hmac(encoder.encode(`AWS4${secretAccessKey}`), dateStamp);
-	const regionKey = await hmac(dateKey, region);
-	const serviceKey = await hmac(regionKey, service);
-	const signingKey = await hmac(serviceKey, "aws4_request");
-	const signature = toHex(await hmac(signingKey, stringToSign));
-
-	return {
-		Authorization:
-			`AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
-			`SignedHeaders=${signedHeaders}, Signature=${signature}`,
-		"x-amz-content-sha256": payloadHash,
-		"x-amz-date": amzDate,
-	};
-}
-
 type ListedObject = {
 	key: string;
 	size: number;
 	lastModified?: string;
 };
-
-function decodeXml(value: string) {
-	return value
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&apos;/g, "'");
-}
-
-function parsePage(xml: string) {
-	const objects: ListedObject[] = [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)]
-		.map((match) => {
-			const contents = match[1];
-			const key = contents.match(/<Key>([\s\S]*?)<\/Key>/)?.[1];
-			const size = contents.match(/<Size>(\d+)<\/Size>/)?.[1];
-			const lastModified = contents.match(
-				/<LastModified>([\s\S]*?)<\/LastModified>/,
-			)?.[1];
-			if (key === undefined || size === undefined) {
-				return undefined;
-			}
-			const object: ListedObject = {
-				key: decodeXml(key),
-				size: Number(size),
-			};
-			if (lastModified) object.lastModified = decodeXml(lastModified);
-			return object;
-		})
-		.filter((object): object is ListedObject => object !== undefined);
-	const isTruncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
-	const nextToken = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
-	return { objects, isTruncated, nextToken };
-}
 
 function extensionFor(key: string) {
 	const fileName = key.slice(key.lastIndexOf("/") + 1);
@@ -183,27 +73,16 @@ export class R2MetricsEndpoint extends OpenAPIRoute {
 		operationId: "get-r2-metrics",
 		responses: {
 			"200": {
-				description: "R2 bucket metrics calculated from its S3 object listing",
+				description: "R2 bucket metrics calculated from the bound R2 bucket",
 				...contentJson(metricsSchema),
 			},
-			"502": { description: "R2 S3 metrics request failed" },
+			"502": { description: "R2 bucket metrics request failed" },
 			"500": { description: "R2 metrics configuration is incomplete" },
 		},
 	};
 
 	public async handle(c: AppContext) {
-		const {
-			R2_ACCOUNT_ID,
-			R2_ACCESS_KEY_ID,
-			R2_SECRET_ACCESS_KEY,
-			R2_BUCKET_NAME,
-		} = c.env;
-		if (
-			!R2_ACCOUNT_ID ||
-			!R2_ACCESS_KEY_ID ||
-			!R2_SECRET_ACCESS_KEY ||
-			!R2_BUCKET_NAME
-		) {
+		if (!c.env.POSTS_BUCKET) {
 			console.error("R2 metrics configuration is incomplete");
 			return c.json(
 				{
@@ -215,37 +94,25 @@ export class R2MetricsEndpoint extends OpenAPIRoute {
 		}
 
 		const objects: ListedObject[] = [];
-		let continuationToken: string | undefined;
+		let cursor: string | undefined;
 
 		try {
 			do {
-				const url = new URL(
-					`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${encodeURIComponent(R2_BUCKET_NAME)}`,
-				);
-				url.searchParams.set("list-type", "2");
-				if (continuationToken) {
-					url.searchParams.set("continuation-token", continuationToken);
-				}
-				const response = await fetch(url, {
-					headers: await createAuthorization(
-						url,
-						R2_ACCESS_KEY_ID,
-						R2_SECRET_ACCESS_KEY,
-						new Date(),
-					),
+				const page = await c.env.POSTS_BUCKET.list({
+					limit: 1000,
+					cursor,
 				});
-				if (!response.ok) {
-					throw new Error(`S3 request failed with status ${response.status}`);
-				}
-				const page = parsePage(await response.text());
-				objects.push(...page.objects);
-				continuationToken = page.isTruncated ? page.nextToken : undefined;
-				if (page.isTruncated && !continuationToken) {
-					throw new Error("S3 response was truncated without a continuation token");
-				}
-			} while (continuationToken);
+				objects.push(
+					...page.objects.map((object) => ({
+						key: object.key,
+						size: object.size,
+						lastModified: object.uploaded.toISOString(),
+					})),
+				);
+				cursor = page.truncated ? page.cursor : undefined;
+			} while (cursor);
 		} catch (error) {
-			console.error("R2 S3 metrics request failed", error);
+			console.error("R2 bucket metrics request failed", error);
 			return c.json(
 				{
 					success: false,

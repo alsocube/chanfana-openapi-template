@@ -10,12 +10,6 @@
 	"observability": {
 		"enabled": true
 	},
-	"vars": {
-		"R2_ACCOUNT_ID": "0d8499ecd9b722978540982397cbfedd",
-		"R2_BUCKET_NAME": "simplycms",
-		"R2_ACCESS_KEY_ID": "160de48420fd20a3112c2b5d1210fd43",
-		"R2_SECRET_ACCESS_KEY": "3a692eda9c10caaa10d5b7ea8a4000d48de7b586a85863845aa897a34039812c"
-	},
 	"r2_buckets": [
 		{
 			"binding": "POSTS_BUCKET",
